@@ -1,0 +1,413 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r}
+require(readr)
+require(lubridate)
+require(hms)
+require(dplyr)
+require(ggplot2)
+require(gridExtra)
+
+# Setting sistem locale to en_US to display weekdays in english
+current_locale <- Sys.getlocale("LC_TIME")
+Sys.setlocale("LC_TIME","en_US.UTF-8")
+```
+
+# Prepare
+
+### Load 2019Q1
+
+```{r}
+analysis_cols <- c("trip_id", "start_time", "end_time", "usertype")
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2019_Q1.zip"
+bshares_2019_Q1 <- read_csv(FILEPATH, show_col_types = FALSE) %>% select(analysis_cols)
+bshares_2019_Q1$yr_qrtr <- "2019Q1"
+```
+
+### Load 2019Q2
+
+```{r}
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2019_Q2.zip"
+bshares_2019_Q2 <- read_csv(FILEPATH, show_col_types = FALSE)
+glimpse(bshares_2019_Q2)
+```
+
+Columns used for analysis have to be renamed in order to union the dataframes properly.
+
+```{r}
+bshares_2019_Q2 <- bshares_2019_Q2 %>%
+  rename(trip_id = `01 - Rental Details Rental ID`) %>%
+  rename(start_time = `01 - Rental Details Local Start Time`) %>%
+  rename(end_time = `01 - Rental Details Local End Time`) %>%
+  rename(usertype = `User Type`) %>%
+  select(analysis_cols)
+bshares_2019_Q2$yr_qrtr <- "2019Q2"
+```
+
+### Load 2019Q3
+
+```{r}
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2019_Q3.zip"
+bshares_2019_Q3 <- read_csv(FILEPATH, show_col_types = FALSE) %>% select(analysis_cols)
+bshares_2019_Q3$yr_qrtr <- "2019Q3"
+```
+
+### Load 2019Q4
+
+```{r}
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2019_Q4.zip"
+bshares_2019_Q4 <- read_csv(FILEPATH, show_col_types = FALSE) %>% select(analysis_cols)
+bshares_2019_Q4$yr_qrtr <- "2019Q4"
+```
+
+### Load 2020Q1
+
+```{r}
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2020_Q1.zip"
+bshares_2020_Q1 <- read_csv(FILEPATH, show_col_types = FALSE)
+glimpse(bshares_2020_Q1)
+```
+It is important to note that columns used for analysis has been renamed in this quarter.
+
+```{r}
+bshares_2020_Q1 <- bshares_2020_Q1 %>%
+  rename(trip_id = ride_id) %>%
+  rename(start_time = started_at) %>%
+  rename(end_time = ended_at) %>%
+  rename(usertype = member_casual)
+```
+
+However, usertype has different categories, so they have to be changed
+
+```{r}
+bshares_2020_Q1 <- bshares_2020_Q1 %>%
+  # mutate(usertype = recode(usertype, casual="Customer", member="Subscriber")) %>% 
+  mutate(usertype = recode(usertype, casual="Subscriber", member="Customer")) %>% 
+  select(analysis_cols)
+bshares_2020_Q1$yr_qrtr <- "2020Q1"
+```
+
+
+### Union all dataframes
+
+```{r}
+bike_shares <- rbind(
+  bshares_2019_Q1, 
+  bshares_2019_Q2,
+  bshares_2019_Q3,
+  bshares_2019_Q4,
+  bshares_2020_Q1
+)
+
+glimpse(bike_shares)
+```
+
+```{r}
+colSums(is.na(bike_shares))
+```
+
+
+# Process
+
+```{r}
+bike_shares$ride_length <- as.hms(bike_shares$end_time - bike_shares$start_time)
+bike_shares$day_of_week <- weekdays(bike_shares$end_time)
+bike_shares$day_of_week <- ordered(
+  bike_shares$day_of_week, 
+  levels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+)
+bike_shares$day_of_week_num <- as.POSIXlt(bike_shares$end_time)$wday + 1
+bike_shares$start_hour <- as.hms(bike_shares$start_time + hours(3))
+bike_shares$start_daymonth <- format(bike_shares$start_time, "%Y-%m")
+head(bike_shares[, c("start_time", "start_hour", "end_time", "ride_length", "day_of_week", "start_daymonth")])
+```
+```{r}
+agg_data <- data.frame(c(""))
+agg_data$ride_length_mean <- as.hms(mean(bike_shares$ride_length))
+agg_data$ride_length_max <- as.hms(max(bike_shares$ride_length))
+agg_data$dow_mode <- names(which.max(table(bike_shares$day_of_week_num)))[1]
+head(agg_data)
+```
+
+# Analyze & Share
+During the analysis several plots are made to support the analysis or to understand data.
+Those plots will be embedded during the sharing phase while creating a presentation (using slides).
+## Distribution of Rides by Hours
+
+Let's see if the categories of User Types are correct for the 2020Q1 quarter, since category names
+changed for this dataset. For so, we'll compare the riding behavior of both populations 
+(customers and subscribers) during the day. We expect a similar behavior which is 
+also replicated in the previous quarters.
+
+```{r}
+cust_19q4_plot <- bike_shares %>% 
+  filter(usertype=="Customer") %>% 
+  filter(yr_qrtr=="2019Q4") %>%
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#F8766D") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Customer Rides 2019Q4",
+       x = "Hour of the Day",
+       y = "Number of rides",
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+
+cust_20q1_plot <- bike_shares %>% 
+  filter(usertype=="Customer") %>% 
+  filter(yr_qrtr=="2020Q1") %>%
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#00BFC4") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Customer Rides 2020Q1",
+       x = "Hour of the Day",
+       y = "Number of rides"
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(cust_19q4_plot, cust_20q1_plot, ncol=1)
+
+```
+The customer behavior it's quite different for the last quarter (2020 Q1). Let's see how it compares to 
+the subscriber behavior.
+
+```{r}
+cust_19q4_plot <- bike_shares %>% 
+  filter(usertype=="Customer") %>% 
+  filter(yr_qrtr=="2019Q4") %>%
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#F8766D") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Customer Rides 2019Q4",
+       x = "Hour of the Day",
+       y = "Number of rides",
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+
+subs_20q1_plot <- bike_shares %>% 
+  filter(usertype=="Subscriber") %>% 
+  filter(yr_qrtr=="2020Q1") %>%
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#00BFC4") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Subscriber (?) Rides 2020Q1",
+       x = "Hour of the Day",
+       y = "Number of rides"
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(cust_19q4_plot, subs_20q1_plot, ncol=1)
+
+```
+Since distributions are similar to the previous quarter, despite the number of rides, 
+we conclude that categories are mixed up. They'll be interchanged for the 2020Q1 quarter.
+
+```{r}
+bike_shares <- bike_shares %>%
+  mutate(usertype = ifelse(
+    yr_qrtr == "2020Q1", 
+    ifelse(usertype=="Subscriber", "Customer", "Subscriber"), 
+    usertype)
+  )
+```
+
+Let's confirm if the changes were applied
+
+```{r}
+cust_19q4_plot <- bike_shares %>% 
+  filter(usertype=="Customer") %>% 
+  filter(yr_qrtr=="2019Q4") %>%
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#F8766D") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Customer Rides 2019Q4",
+       x = "Hour of the Day",
+       y = "Number of rides",
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+
+cust_20q1_plot <- bike_shares %>% 
+  filter(usertype=="Customer") %>% 
+  filter(yr_qrtr=="2020Q1") %>%
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#00BFC4") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Customer Rides 2020Q1",
+       x = "Hour of the Day",
+       y = "Number of rides"
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(cust_19q4_plot, cust_20q1_plot, ncol=1)
+```
+
+Now we're ready to go. Let's now check the distribution of rides along the whole 
+period under analysis (2019 and 2020 Q1)
+
+```{r}
+customer_plot <- bike_shares %>% 
+  filter(usertype=="Customer") %>% 
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#F8766D") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Customer Rides",
+       x = "Hour of the Day",
+       y = "Number of rides",
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+
+subscriber_plot <- bike_shares %>% 
+  filter(usertype=="Subscriber") %>% 
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#00BFC4") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Subscriber Rides",
+       x = "Hour of the Day",
+       y = "Number of rides"
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(customer_plot, subscriber_plot, ncol=1)
+
+```
+It's pretty clear that the behavior of Customer and Subscribers differs signigicantly
+on the way they use the service.
+
+```{r}
+count(bike_shares %>% filter(usertype=="Subscriber")) / count(bike_shares)
+```
+
+
+```{r}
+subscribers_peaks <- bike_shares %>% 
+  filter(usertype=="Subscriber") %>%
+  filter(
+    (hour(start_time) > 07 & hour(start_time) < 09) 
+    | (hour(start_time) > 16 & (hour(start_time) < 19))
+  )
+
+num_rides_subs_peak <- as.numeric(count(subscribers_peaks))
+num_rides_customrs <- as.numeric(count(bike_shares %>% filter(usertype=="Customer")))
+
+usertype <- c("Subscriber", "Customer")
+values <- c(num_rides_subs_peak, num_rides_customrs)
+num_rides <- data.frame(usertype, values)
+ggplot(num_rides, aes(x=usertype, y=values, fill=usertype)) +
+  geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title="Customer Trips vs Peak Hour Subscribers",
+    x = "User Type",
+    y = "Number of rides",
+  ) + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Customer rides represent around 1M trips during the time analyzed. 
+This is almost the same amount of rides that casual riders do in peak hours.
+
+
+```{r}
+print(count(subscribers_peaks) / count(bike_shares %>% filter(usertype=="Subscriber")))
+```
+
+Peak rides represent around 30% of total Subscriber rides. It is a significant proportion to create a variable price based on peak demand.
+
+## Seasonality
+
+```{r}
+by_qrtr <- bike_shares %>%
+  group_by(yr_qrtr) %>%
+  summarise(trip_cnt = n())
+
+ggplot(by_qrtr, aes(x=yr_qrtr, y=trip_cnt, fill=yr_qrtr)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title="Amount of trips per Quarter",
+    x = "Quarter",
+    y = "Number of rides",
+    fill = "Quarter"
+  ) + 
+  scale_fill_manual(
+    values=c("#56B4E9", "#009E73", "#DF536B", "#E69F00", "#56B4E9")
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+trips_month <- bike_shares %>%
+  group_by(start_daymonth, usertype) %>%
+  summarise(trip_cnt = n())
+
+ggplot(trips_month, aes(x=start_daymonth, y=trip_cnt, group=usertype)) +
+   geom_line(aes(color=usertype)) +
+   geom_point(aes(color=usertype)) + 
+   labs(
+     title = "Trip Count by Month per User Type",
+     x = "Month",
+     y = "Number of rides",
+     fill = "User Type"
+  ) + 
+  theme(
+     axis.text.x = element_text(angle = 45, hjust = 1), 
+     plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r}
+customer_trips <- trips_month %>% filter(usertype=="Customer")
+subscriber_trips <- trips_month %>% filter(usertype=="Subscriber")
+
+cor.test(customer_trips$trip_cnt, subscriber_trips$trip_cnt)
+```
+Given the strong linear positive correlation we conclude that seasonality affects in the same way both groups. People tend to ride the bike oftenly during summer time, followed by less activity in autumn and spring and almost null activity during winter.
+
+## Duration of Trip
+
+```{r}
+agg_data <- bike_shares %>%
+  group_by(usertype, day_of_week) %>%
+  summarise(mean_ride_length = as.hms(mean(ride_length)))
+
+ggplot(agg_data, aes(x=day_of_week, y=mean_ride_length, fill=usertype)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title="Trip Duration per User Type by Day of The Week",
+    x = "Day",
+    y = "Number of rides",
+    fill = "User Type"
+  ) + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+```{r}
+agg_data <- bike_shares %>%
+  group_by(usertype, start_daymonth) %>%
+  summarise(mean_ride_length = as.hms(mean(ride_length)))
+
+ggplot(agg_data, aes(x=start_daymonth, y=mean_ride_length, fill=usertype)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title="Trip Duration per User Type by Month",
+    x = "Month",
+    y = "Avg ride duration",
+    fill = "User Type"
+  ) + 
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+Winter months have longer trip durations by Customers
+
+## Amount of Trips per User Type
+
+```{r}
+by_day_of_wk <- bike_shares %>%
+  group_by(day_of_week, usertype) %>%
+  summarise(trip_cnt = n())
+
+ggplot(by_day_of_wk, aes(x=day_of_week, y=trip_cnt, fill=usertype)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title="Amount of trips per User Type",
+    x = "Day",
+    y = "Number of rides",
+    fill = "User Type"
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+```{r}
+Sys.setlocale("LC_TIME", current_locale)
+```

@@ -1,0 +1,125 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Import stuff
+```{r}
+require(readr)
+require(lubridate)
+require(hms)
+require(dplyr)
+require(ggplot2)
+require(gridExtra)
+```
+
+```{r}
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2019_Q1.zip"
+bike_shares <- read_csv(FILEPATH)
+glimpse(bike_shares)
+```
+Note: Since we cannot allocate a dataframe containing data from 2019 and 2020 due to size restrictions we're going to analyze them individually
+
+### Process
+
+```{r}
+bike_shares$ride_length <- as.hms(bike_shares$end_time - bike_shares$start_time)
+bike_shares$day_of_week <- as.POSIXlt(bike_shares$end_time)$wday + 1
+bike_shares$start_hour <- as.hms(bike_shares$start_time + hours(3))
+head(bike_shares[, c("start_time", "start_hour", "end_time", "ride_length", "day_of_week")])
+```
+
+```{r}
+agg_data <- data.frame(c(""))
+agg_data$ride_length_mean <- as.hms(mean(bike_shares$ride_length))
+agg_data$ride_length_max <- as.hms(max(bike_shares$ride_length))
+agg_data$dow_mode <- names(which.max(table(bike_shares$day_of_week)))[1]
+head(agg_data)
+```
+
+
+### Analyse
+
+```{r}
+agg_data <- bike_shares %>%
+  group_by(usertype) %>%
+  summarise(mean_ride_length = as.hms(mean(ride_length)))
+print(agg_data)
+```
+```{r}
+agg_data <- bike_shares %>%
+  group_by(usertype, day_of_week) %>%
+  summarise(mean_ride_length = as.hms(mean(ride_length)))
+print(agg_data)
+```
+
+```{r}
+ggplot(agg_data, aes(x=day_of_week, y=mean_ride_length, fill=usertype)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title="Trip Duration per User Type by Day of The Week",
+    x = "Day of the week \n(1 = Sunday)",
+    y = "Number of rides",
+    fill = "User Type"
+  ) + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+```{r}
+agg_data <- bike_shares %>%
+  group_by(trip_id) %>%
+  summarise(trip_cnt = n()) %>%
+  arrange(desc(trip_cnt))
+head(agg_data)
+```
+
+trip_id's are unique
+
+```{r}
+by_day_of_wk <- bike_shares %>%
+  group_by(day_of_week, usertype) %>%
+  summarise(trip_cnt = n())
+head(by_day_of_wk)
+```
+
+This aggrupated data is easier to see in a barplot
+
+```{r}
+ggplot(by_day_of_wk, aes(x=day_of_week, y=trip_cnt, fill=usertype)) + 
+  geom_bar(stat="identity", position=position_dodge()) + 
+  labs(title="Amount of trips per User Type by day of the week",
+    x = "Day of the week \n(1 = Sunday)",
+    y = "Number of rides",
+    fill = "User Type"
+  )
+  
+```
+
+### Distribution of rides per daily hours
+
+```{r}
+customers_plot <- bike_shares %>% 
+  filter(usertype=="Customer") %>% 
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#F8766D") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Customer Rides",
+       x = "Hour of the Day",
+       y = "Number of rides",
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+
+subscribers_plot <- bike_shares %>% 
+  filter(usertype=="Subscriber") %>% 
+  ggplot(aes(x=start_hour)) +
+    geom_histogram(bins=24, fill="#00BFC4") + 
+    scale_x_time(breaks = seq(0, 3600*24, by=3600*4)) +
+    labs(title="Distribution of Subscriber Rides",
+       x = "Hour of the Day",
+       y = "Number of rides"
+    ) + 
+    theme(plot.title = element_text(hjust = 0.5))
+grid.arrange(customers_plot, subscribers_plot, ncol=1)
+
+```
+
