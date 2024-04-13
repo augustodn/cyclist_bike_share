@@ -13,22 +13,13 @@ require(gridExtra)
 ```
 
 ```{r}
-FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2019_Q2.zip"
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/data/Divvy_Trips_2019_Q3.zip"
 bike_shares <- read_csv(FILEPATH)
 glimpse(bike_shares)
 ```
 Note: Since we cannot allocate a dataframe containing data from 2019 and 2020 due to size restrictions we're going to analyze them individually
 
 ### Process
-
-```{r}
-bike_shares <- bike_shares %>%
-  rename(trip_id = `01 - Rental Details Rental ID`) %>%
-  rename(start_time = `01 - Rental Details Local Start Time`) %>%
-  rename(end_time = `01 - Rental Details Local End Time`) %>%
-  rename(usertype = `User Type`)
-  # mutate(usertype = recode(usertype, casual="Subscriber", member="Customer"))
-```
 
 
 ```{r}
@@ -71,7 +62,6 @@ ggplot(agg_data, aes(x=day_of_week, y=mean_ride_length, fill=usertype)) +
   ) + 
   theme(plot.title = element_text(hjust = 0.5))
 ```
-
 
 
 ```{r}

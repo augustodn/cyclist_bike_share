@@ -13,14 +13,13 @@ require(gridExtra)
 ```
 
 ```{r}
-FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/Divvy_Trips_2019_Q3.zip"
+FILEPATH <- "~/dev/coursera/google_analytics/08_capstone/bike_share/data/Divvy_Trips_2019_Q1.zip"
 bike_shares <- read_csv(FILEPATH)
 glimpse(bike_shares)
 ```
 Note: Since we cannot allocate a dataframe containing data from 2019 and 2020 due to size restrictions we're going to analyze them individually
 
 ### Process
-
 
 ```{r}
 bike_shares$ride_length <- as.hms(bike_shares$end_time - bike_shares$start_time)
@@ -52,6 +51,7 @@ agg_data <- bike_shares %>%
   summarise(mean_ride_length = as.hms(mean(ride_length)))
 print(agg_data)
 ```
+
 ```{r}
 ggplot(agg_data, aes(x=day_of_week, y=mean_ride_length, fill=usertype)) + 
   geom_bar(stat="identity", position=position_dodge()) + 
@@ -62,6 +62,7 @@ ggplot(agg_data, aes(x=day_of_week, y=mean_ride_length, fill=usertype)) +
   ) + 
   theme(plot.title = element_text(hjust = 0.5))
 ```
+
 
 
 ```{r}
@@ -91,6 +92,7 @@ ggplot(by_day_of_wk, aes(x=day_of_week, y=trip_cnt, fill=usertype)) +
     y = "Number of rides",
     fill = "User Type"
   )
+  
 ```
 
 ### Distribution of rides per daily hours
